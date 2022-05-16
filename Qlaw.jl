@@ -102,26 +102,22 @@ struct QParams
 end
 
 function calc_D(orbit, target, F_vec, µ, Q_params)
-    print(Q_params)
     # unpack orbit
-    p = orbit[1] # semi-latus rectum [meters]
+    a = orbit[1]
     f = orbit[2]
     g = orbit[3]
     h = orbit[4]
     k = orbit[5]
-    L = orbit[6] # true longitude [rad]
-    s2 = 1+h^2+k^2 # derived
     
-    p_t = target[1] # semi-latus rectum [meters]
-    f_t = target[2]
-    g_t = target[3]
-    h_t = target[4]
-    k_t = target[5]
-    L_t = target[6] # true longitude [rad]
+    # derived elements
+    s2 = 1+h^2+k^2
+    e = sqrt(f^2 + g^2) # eccentricity
+    p = a*(1-e^2) # needed for derivatives (eq. 14-18)
+    r_p = p/(1+e) # periapsis   
     
-    # unpack params
+    # hyper params
     r_p_min = Q_params.r_p_min
-    W = zeros(5)
+    W = @MVector zeros(5)
     W[1] = Q_params.W_a
     W[2] = Q_params.W_f
     W[3] = Q_params.W_g
@@ -135,15 +131,10 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
         
     # F 
     F = norm(F_vec)
-
-    a = p/(1-f^2-g^2) # semi-major axis
-    a_t = p_t/(1-f_t^2-g_t^2)
-    e = sqrt(f^2 + g^2) # eccentricity
-    r_p = p/(1+e) # periapsis
-
-    #         
-    sqrt_fg = sqrt(f^2 + g^2)
-    sqrt_p_over_µ = sqrt(p/µ)
+    
+    # Eq. 14-18
+    sqrt_fg = sqrt(f^2 + g^2) # helper
+    sqrt_p_over_µ = sqrt(p/µ) # helper
     oe_dot_xx_temp = [
         2*a*sqrt((a*(1 + sqrt_fg))/(µ*(1 - sqrt_fg))),
         2*sqrt_p_over_µ,
@@ -153,9 +144,11 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
     ]
     oe_dot_xx_temp[3] = oe_dot_xx_temp[2]
     oe_dot_xx = oe_dot_xx_temp * F # need to 
+
     
-    doe_dot_xx_dF = [0.0, 0.0, 0.0]
+    # Eq. 21-23 - doe_dot/dF (3 partials)
     # avoid divide by zero if F is aligned with a coordinate axis
+    doe_dot_xx_dF = @MVector zeros(3)
     if F_vec[2] == 0 && F_vec[3] == 0
         doe_dot_xx_dF[1] = sum(oe_dot_xx_temp) * F_vec[1]
     else
@@ -172,40 +165,25 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
         doe_dot_xx_dF[3] = sum(oe_dot_xx_temp) * F_vec[3] / F
     end
     
-    # Scaling Factors
-    S_oe = [(1 + ((1 - a_t)/(m*a_t))^n)^(1/r), # eq. 8
+    # Eq. 8 - Scaling Factors 
+    a_t = target[1]
+    S_oe = @MVector [(1 + ((1 - a_t)/(m*a_t))^n)^(1/r), # eq. 8
         1,
         1,
         1,
         1
     ]
 
-    # Penalty
+    # Eq. 9 - Penalty
     P = exp(k_penalty*(1 - r_p/r_p_min))
-        
-    Q_p = zeros(5)
-    Q = zeros(5)
-    Q_m = zeros(5)
     
-    Q_p[1] = S_oe[1]*W[1]*((a + h/2 - target[1])/oe_dot_xx[1])^2
-    Q_p[2] = S_oe[2]*W[2]*((orbit[2] + h/2 - target[2])/oe_dot_xx[2])^2
-    Q_p[3] = S_oe[3]*W[3]*((orbit[3] + h/2 - target[3])/oe_dot_xx[2])^2
-    Q_p[4] = S_oe[4]*W[4]*((orbit[4] + h/2 - target[4])/oe_dot_xx[3])^2
-    Q_p[5] = S_oe[5]*W[5]*((orbit[5] + h/2 - target[5])/oe_dot_xx[4])^2
-        
-    Q[1] = S_oe[1]*W[1]*((a - target[1])/oe_dot_xx[1])^2
-    Q[2] = S_oe[2]*W[2]*((orbit[2] - target[2])/oe_dot_xx[2])^2
-    Q[3] = S_oe[3]*W[3]*((orbit[3] - target[3])/oe_dot_xx[2])^2
-    Q[4] = S_oe[4]*W[4]*((orbit[4] - target[4])/oe_dot_xx[3])^2
-    Q[5] = S_oe[5]*W[5]*((orbit[5] - target[5])/oe_dot_xx[4])^2
+    Q_p = @MVector zeros(5)
+    Q_m = @MVector zeros(5)
     
-    Q_m[1] = S_oe[1]*W[1]*((a - h/2 - target[1])/oe_dot_xx[1])^2
-    Q_m[2] = S_oe[2]*W[2]*((orbit[2] - h/2 - target[2])/oe_dot_xx[2])^2
-    Q_m[3] = S_oe[3]*W[3]*((orbit[3] - h/2 - target[3])/oe_dot_xx[2])^2
-    Q_m[4] = S_oe[4]*W[4]*((orbit[4] - h/2 - target[4])/oe_dot_xx[3])^2
-    Q_m[5] = S_oe[5]*W[5]*((orbit[5] - h/2 - target[5])/oe_dot_xx[4])^2
-        
-    dQ = sum(4 .* Q .+ (1 + W[1] .* P)) * sum((Q_p - Q_m)/(h)) # TODO double check this sum is correct
+    # Eq. 7 - dQ/doe
+    Q_p = S_oe .* W .*((orbit .+ h/2 .- target)./oe_dot_xx).^2 
+    Q_m = S_oe .* W .*((orbit .- h/2 .- target)./oe_dot_xx).^2
+    dQ = sum(1 + W[1] .* P) * sum((Q_p .- Q_m)/h) # TODO double check this sum is correct
     
     return dQ .* doe_dot_xx_dF
 
