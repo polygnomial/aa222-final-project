@@ -21,6 +21,7 @@ struct KeplarianOrbit
     ν # true anomaly [rad]
 end
 
+# https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/Source%20Docs/EquinoctalElements-modified.pdf
 function Equinoctial2Keplarian(orbit::KeplarianOrbit)
     # unload orbit parameters
     p = orbit.p
@@ -30,7 +31,6 @@ function Equinoctial2Keplarian(orbit::KeplarianOrbit)
     k = orbit.k
     L = orbit.L
     # convert orbital elements
-    # from https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/Source%20Docs/EquinoctalElements-modified.pdf
     a = p/(1-f^2-g^2)
     e = sqrt(f^2 + g^2)
     i = atan(2*sqrt(h^2+k^2), 1-h^2-k^2)
@@ -58,7 +58,7 @@ function Keplarian2Equinoctial(orbit::KeplarianOrbit)
     return(EquinoctialOrbit(p,f,g,h,k,L))
 end
 
-function GaussVariationalEquationsEquinoctial(orbit, accel)
+function GaussVariationalEquationsEquinoctial(orbit, accel, time)
     # unpack orbit
     p = orbit[1] # semi latus rectum [meters]
     f = orbit[2]
@@ -75,13 +75,25 @@ function GaussVariationalEquationsEquinoctial(orbit, accel)
     s_2 = 1 + h^2 + k^2
 
     # calculate matrix
-    A = [[0, sinL, -cosL, 0, 0, 0]
-         [2*p/w, (1/w)*((w+1)*cosL+f), (w+1)*sinL+g, 0, 0, 0]
-         [0, -(g/w)*(h*sinL-k*cosL), (f/w)*(h*sinL-k*cosL), (s_2*cosL)/(2*w), (s_2*sinL)/(2*w), h*sinL-k*cosL]]
-    A = []
+    A = [0 2*p/w 0;
+        sinL (1/w)*((w+1)*cosL+f) -(g/w)*(h*sinL-k*cosL);
+        -cosL (w+1)*sinL+g (f/w)*(h*sinL-k*cosL);
+        0 0 (s_2*cosL)/(2*w);
+        0 0 (s_2*sinL)/(2*w);
+        0 0 h*sinL-k*cosL]
+
     A = root_p_µ * A
     b = [0, 0, 0, 0, 0, sqrt(µ*p)*(w/p)^2]
 
     # calculate doe/dt
-    dOEdt = A
+    dOEdt = A*accel + b
+end
+
+function RK45(orbit, GVE, step;dOEdt = GaussVariationalEquationsEquinoctial)
+    k1 = step *
+    k2 = step *
+    k3 = step *
+    k4 = step *
+    k5 = step *
+    k6 = step *
 end
