@@ -2,7 +2,8 @@ using StaticArrays
 using LinearAlgebra
 
 # constants
-µ = 3.986004419 * 10^14
+const µ = 3.986004419 * 10^14 # standard gravitational parameter earth [m^3/s^2]
+const R_e = 6371000. # average earth radius [m]
 
 struct EquinoctialOrbit
     p # semi latus rectum [meters]
@@ -41,6 +42,29 @@ function Equinoctial2Keplarian(orbit::KeplarianOrbit)
     return(KeplarianOrbit(a, e, i, ω, Ω, ν))
 end
 
+function Equinoctial2ECI(orbit::EquinoctialOrbit)
+    # unload orbit parameters
+    p = orbit.p
+    f = orbit.f
+    g = orbit.g
+    h = orbit.h
+    k = orbit.k
+    L = orbit.L
+    # calculate important values
+    α_2 = h^2 - k^2
+    s_2 = 1 + h^2 + k^2
+    w = 1 + f*cos(L) + g*sin(L)
+    r = p/w
+    # convert orbital elements
+    r_x = (r/s_2)*(cos(L)+α_2*cos(L)+2*h*k*sin(L))
+    r_y = (r/s_2)*(sin(L)+α_2*sin(L)+2*h*k*cos(L))
+    r_z = (2*r/s_2)*(h*sin(L)-k*cos(L))
+    v_x = (-1/s_2)*sqrt(µ/p)*(sin(L)+α_2*sin(L)-2*h*k*cos(L)+g-2*f*h*k+α_2*g)
+    v_y = (-1/s_2)*sqrt(µ/p)*(-cos(L)+α_2*cos(L)+2*h*k*sin(L)-f+2*g*h*k+α_2*f)
+    v_z = (2/s_2)*sqrt(µ/p)*(h*cos(L)+k*sin(L)+f*h+g*k)
+    return([r_x, r_y, r_z, v_x, v_y, v_z])
+end
+
 function Keplarian2Equinoctial(orbit::KeplarianOrbit)
     # unload orbit parameters
     a = orbit.a
@@ -59,7 +83,7 @@ function Keplarian2Equinoctial(orbit::KeplarianOrbit)
     return(EquinoctialOrbit(p,f,g,h,k,L))
 end
 
-function GaussVariationalEquationsEquinoctial(orbit, accel, time)
+function GaussVariationalEquationsEquinoctial(orbit, time; accel=[0.,0.,0.])
     # unpack orbit
     p = orbit[1] # semi latus rectum [meters]
     f = orbit[2]
@@ -90,15 +114,6 @@ function GaussVariationalEquationsEquinoctial(orbit, accel, time)
     dOEdt = A*accel + b
 end
 
-function RK45(orbit, GVE, step;dOEdt = GaussVariationalEquationsEquinoctial)
-    k1 = step *
-    k2 = step *
-    k3 = step *
-    k4 = step *
-    k5 = step *
-    k6 = step *
-end
-
 struct QParams
     r_p_min
     W_a # weights
@@ -120,13 +135,13 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
     g = orbit[3]
     h = orbit[4]
     k = orbit[5]
-    
+
     # derived elements
     s2 = 1+h^2+k^2
     e = sqrt(f^2 + g^2) # eccentricity
     p = a*(1-e^2) # needed for derivatives (eq. 14-18)
-    r_p = p/(1+e) # periapsis   
-    
+    r_p = p/(1+e) # periapsis
+
     # hyper params
     r_p_min = Q_params.r_p_min
     W = @MVector zeros(5)
@@ -140,10 +155,10 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
     r = Q_params.r
     k_penalty = Q_params.k # I forget
     h = Q_params.h # central difference stepsize
-        
-    # F 
+
+    # F
     F = norm(F_vec)
-    
+
     # Eq. 14-18
     sqrt_fg = sqrt(f^2 + g^2) # helper
     sqrt_p_over_µ = sqrt(p/µ) # helper
@@ -155,9 +170,9 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
         1/2*sqrt_p_over_µ*s2/(sqrt(1-f^2)+g)
     ]
     oe_dot_xx_temp[3] = oe_dot_xx_temp[2]
-    oe_dot_xx = oe_dot_xx_temp * F # need to 
+    oe_dot_xx = oe_dot_xx_temp * F # need to
 
-    
+
     # Eq. 21-23 - doe_dot/dF (3 partials)
     # avoid divide by zero if F is aligned with a coordinate axis
     doe_dot_xx_dF = @MVector zeros(3)
@@ -176,8 +191,8 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
     else
         doe_dot_xx_dF[3] = sum(oe_dot_xx_temp) * F_vec[3] / F
     end
-    
-    # Eq. 8 - Scaling Factors 
+
+    # Eq. 8 - Scaling Factors
     a_t = target[1]
     S_oe = @MVector [(1 + ((1 - a_t)/(m*a_t))^n)^(1/r), # eq. 8
         1,
@@ -188,15 +203,15 @@ function calc_D(orbit, target, F_vec, µ, Q_params)
 
     # Eq. 9 - Penalty
     P = exp(k_penalty*(1 - r_p/r_p_min))
-    
+
     Q_p = @MVector zeros(5)
     Q_m = @MVector zeros(5)
-    
+
     # Eq. 7 - dQ/doe
-    Q_p = S_oe .* W .*((orbit .+ h/2 .- target)./oe_dot_xx).^2 
+    Q_p = S_oe .* W .*((orbit .+ h/2 .- target)./oe_dot_xx).^2
     Q_m = S_oe .* W .*((orbit .- h/2 .- target)./oe_dot_xx).^2
     dQ = sum(1 + W[1] .* P) * sum((Q_p .- Q_m)/h) # TODO double check this sum is correct
-    
+
     return dQ .* doe_dot_xx_dF
 
 end
