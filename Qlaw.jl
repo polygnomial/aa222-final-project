@@ -24,7 +24,7 @@ struct KeplarianOrbit
 end
 
 # https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/Source%20Docs/EquinoctalElements-modified.pdf
-function Equinoctial2Keplarian(orbit::KeplarianOrbit)
+function Equinoctial2Keplarian(orbit::EquinoctialOrbit)
     # unload orbit parameters
     p = orbit.p
     f = orbit.f

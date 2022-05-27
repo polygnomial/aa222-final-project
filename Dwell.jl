@@ -4,8 +4,8 @@ using Plotly
 
 # Create starting orbit and time, end time, step size
 orbit_inital_keplarian = KeplarianOrbit(
-                450. + R_e,
-                0.0001,
+                450000. + R_e,
+                0.001,
                 deg2rad(0.001),
                 deg2rad(0.001),
                 deg2rad(0.001),
@@ -20,8 +20,8 @@ orbit_initial = [orbit_initial_equinoctial.p,
                 orbit_initial_equinoctial.L]
 
 time_initial = 59715.0 # MJD
-time_end = time_initial + 0.1 # stop integrator after this time
-step_size = (1. / 24.) / 60. / 60. # 1 min
+time_end = time_initial + (90. / 60. / 24.) # stop integrator after this time
+step_size = 1. # seconds
 
 # Initialize history to store propogated orbits and error bounds
 orbit_history = [orbit_initial]
@@ -35,11 +35,12 @@ while time < time_end
     global time = time_history[end]
     orbit = orbit_history[end]
     orbit_new, error = RK45(orbit, time, step_size, dOEdt = GaussVariationalEquationsEquinoctial)
-    push!(time_history, time + step_size)
+    push!(time_history, time + (step_size / 60. / 60. / 24.))
     push!(orbit_history, orbit_new)
     push!(error_history, error)
 end
 print("Integration finished!\n")
+
 # store ECI terms
 ECI_x = []
 ECI_y = []
