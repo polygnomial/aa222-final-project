@@ -1,5 +1,6 @@
 include("Qlaw.jl")
 include("Integrator.jl")
+include("NewtonsMethod.jl")
 using Plotly
 
 # Create starting orbit and time, end time, step size
@@ -20,8 +21,8 @@ orbit_initial = [orbit_initial_equinoctial.p,
                 orbit_initial_equinoctial.L]
 
 time_initial = 59715.0 # MJD
-time_end = time_initial + (90. / 60. / 24.) # stop integrator after this time
-step_size = 1. # seconds
+time_end = time_initial + (5*90. / 60. / 24.) # stop integrator after this time
+step_size = 10 # seconds
 
 # Initialize history to store propogated orbits and error bounds
 orbit_history = [orbit_initial]
@@ -54,6 +55,7 @@ for orbit in orbit_history
 end
 
 # plot orbit
+print("Plotting...\n")
 n = 10
 u = collect(range(0,2*π, length = n))
 v = collect(range(0,π, length = n))
@@ -68,7 +70,7 @@ x = @. r_e * cos(u) * sin(v)
 y = @. r_e * sin(u) * sin(v)
 z = @. r_e * cos(v)
 
-layout = Layout(title="Demonatration of Numerical Propogator")
+layout = Layout(title="Demonatration of Numerical Propogator Dwell")
 trace1 = surface(x=x, y=y, z=z, showscale=false)
 trace2 = scatter3d(x=(ECI_x ./ 1000), y=(ECI_y ./ 1000), z=(ECI_z ./ 1000),
     mode="markers",
@@ -77,7 +79,27 @@ trace2 = scatter3d(x=(ECI_x ./ 1000), y=(ECI_y ./ 1000), z=(ECI_z ./ 1000),
     ))
 p = plot([trace1, trace2], layout)
 savefig(p, "orbit_propogator.png")
+
 # Propogate orbit with known solutions to determine error
-#TBD!!!
-# Plot differences and compare to error from integrator
-#TBD!!!
+print("Checking with newtons method...\n")
+# pull out calculated true anomalies
+trueAnomaliesNumerical = []
+for orbit in orbit_history
+    # convert to keplarian
+    orbit = Equinoctial2Keplarian(EquinoctialOrbit(orbit[1],
+                                                    orbit[2],
+                                                    orbit[3],
+                                                    orbit[4],
+                                                    orbit[5],
+                                                    orbit[6]))
+    push!(trueAnomaliesNumerical, mod2pi(orbit.ν))
+end
+# determine analytical true trueAnomalies
+trueAnomaliesAnalytical = mod2pi.(propogateTrueAnomaly(time_history, orbit_inital_keplarian))
+# plot error
+error = abs.(trueAnomaliesAnalytical - trueAnomaliesNumerical)
+deltaTime = time_history .- time_history[1]
+layout = Layout(title="Error Difference Between Newton's Method and Numerical Integration",
+                xaxis_title="Days",
+                yaxis_title="Delta True Anomaly [radians]")
+plot(deltaTime, error)
