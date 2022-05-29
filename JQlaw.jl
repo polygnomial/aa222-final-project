@@ -14,6 +14,7 @@ module JQlaw
     export Keplarian2Equinoctial
     export GaussVariationalEquationsEquinoctial
     export QParams
+    export sat_params
     export calc_D
     export propogateTrueAnomaly
 
