@@ -4,6 +4,7 @@ using LinearAlgebra
 # constants
 const µ = 3.986004419 * 10^14 # standard gravitational parameter earth [m^3/s^2]
 const R_e = 6371000. # average earth radius [m]
+const g_0 = 9.80665  # m/s^2 - standard gravity (for Isp calcs)
 
 struct EquinoctialOrbit
     p # semi latus rectum [meters]
@@ -113,6 +114,18 @@ function GaussVariationalEquationsEquinoctial(orbit, time; accel=[0.,0.,0.])
     # calculate doe/dt
     dOEdt = A*accel + b
 end
+
+function mass_loss(sat_p,Isp, ∆t)
+    f = sat_p.mass * sat_p.accel
+    mdot = f / Isp / g_0 
+    return mdot * ∆t
+end 
+
+function mass_loss!(sat_p,Isp, ∆t)
+    f = sat_p.mass * sat_p.accel
+    mdot = f / Isp / g_0 
+    sat_p.mass -= mdot + ∆t
+end 
 
 struct QParams
     W_p    # weight of the minimum radius function
