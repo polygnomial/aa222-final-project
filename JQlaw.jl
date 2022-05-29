@@ -2,7 +2,8 @@ __precompile__()
 module JQlaw
     include("Qlaw.jl")
     include("Integrator.jl")
-    
+    include("NewtonsMethod.jl")
+
     # Qlaw
     export µ
     export R_e
@@ -14,6 +15,7 @@ module JQlaw
     export GaussVariationalEquationsEquinoctial
     export QParams
     export calc_D
+    export propogateTrueAnomaly
 
     # integrator
     export RK45

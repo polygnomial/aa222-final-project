@@ -1,4 +1,3 @@
-
 """
 Newton's Method
 
