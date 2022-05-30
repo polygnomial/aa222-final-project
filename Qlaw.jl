@@ -115,18 +115,6 @@ function GaussVariationalEquationsEquinoctial(orbit, time; accel=[0.,0.,0.])
     dOEdt = A*accel + b
 end
 
-function mass_loss(sat_p,Isp, ∆t)
-    f = sat_p.mass * sat_p.accel
-    mdot = f / Isp / g_0
-    return mdot * ∆t
-end
-
-function mass_loss!(sat_p,Isp, ∆t)
-    f = sat_p.mass * sat_p.accel
-    mdot = f / Isp / g_0
-    sat_p.mass -= mdot + ∆t
-end
-
 struct QParams
     W_p    # weight of the minimum radius function
     k      # internal weighting for minimum pariapsis
@@ -153,6 +141,13 @@ struct sat_params
     mass        # mass of satellite [kg]
     prop_ratio  # ratio of prop mass to total mass
     accel       # acceleration [m/s^2]
+    isp         # specific impulse [s]
+end
+
+function mass_loss(mass, sat_params::sat_params, ∆t)
+    f = mass * sat_params.accel
+    mdot = f / sat_params.isp / g_0
+    return(mass - (mdot * ∆t))
 end
 
 function Q(orbit, target_orbit, Q_params, sat_params)
@@ -357,16 +352,17 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
     Q_hist = []
     orbit_hist = []
     time_hist = []
-
+    mass_hist = []
     #initialize_values
     step_count = 0
     Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
     time = time_initial
+    mass = Sat_Params.mass
     # add initial values to history
     push!(Q_hist, Q_value)
     push!(orbit_hist, orbit)
     push!(time_hist, time)
-
+    push!(mass_hist, mass)
     # integrate until hits max number of steps or Q convergence
     while (step_count < Q_Params.max_iter) && (Q_value > Q_Params.Q_convergence)
         thrust, F_t, F_r, F_n = evaluate_orbit_location(orbit, orbit_target, Q_Params, Sat_Params)
@@ -377,6 +373,7 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
             if Q_new < Q_value
                 Q_value = Q_new
                 orbit = orbit_new
+                mass = mass_loss(mass, Sat_Params, Q_Params.step_size)
             else
                 orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
                 Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
@@ -389,7 +386,8 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
         push!(Q_hist, Q_value)
         push!(orbit_hist, orbit)
         push!(time_hist, time)
+        push!(mass_hist, mass)
     end
 
-    return(Q_hist, orbit_hist, time_hist)
+    return(Q_hist, orbit_hist, time_hist, mass_hist)
 end
