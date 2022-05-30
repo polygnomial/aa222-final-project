@@ -3,6 +3,7 @@ module JQlaw
     include("Qlaw.jl")
     include("Integrator.jl")
     include("NewtonsMethod.jl")
+    include("plotting.jl")
 
     # Qlaw
     export µ
@@ -17,6 +18,9 @@ module JQlaw
     export sat_params
     export propogateTrueAnomaly
     export Qlaw
+    export Equinoctial2ECI
+    export convert_orbit_hist_to_ECI
+    export plot_Q_contour_a_e
 
     # integrator
     export RK45

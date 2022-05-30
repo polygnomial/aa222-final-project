@@ -357,6 +357,7 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
     Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
     time = time_initial
     mass = Sat_Params.mass
+    time_last = time
     # add initial values to history
     push!(Q_hist, Q_value)
     push!(orbit_hist, orbit)
@@ -373,6 +374,7 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
                 Q_value = Q_new
                 orbit = orbit_new
                 mass = mass_loss(mass, Sat_Params, Q_Params.step_size)
+                time_last = time + (Q_Params.step_size / 60. / 60. / 24.)
                 # print("Thrust! \n")
             else
                 orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
@@ -392,6 +394,13 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
         step_count = step_count + 1
         # print(Q_value, "\n")
     end
+
+    # only include history up to last thrust
+    final_index = indexin(time_last, time_hist)[1]
+    Q_hist = Q_hist[1:final_index]
+    orbit_hist = orbit_hist[1:final_index]
+    time_hist = time_hist[1:final_index]
+    mass_hist = mass_hist[1:final_index]
 
     return(Q_hist, orbit_hist, time_hist, mass_hist)
 end
