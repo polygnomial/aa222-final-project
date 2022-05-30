@@ -21,6 +21,7 @@ module JQlaw
     export Equinoctial2ECI
     export convert_orbit_hist_to_ECI
     export plot_Q_contour_a_e
+    export make_make_objective
 
     # integrator
     export RK45

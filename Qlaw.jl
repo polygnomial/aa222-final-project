@@ -275,7 +275,7 @@ function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params)
     L_current = orbit[6]
 
     # create array of true longitude to search
-    L_array = collect(range(0, (2*pi - (2*pi/num_eval_points)), length = (num_eval_points - 1)))
+    L_array = collect(range(0, (2*pi - (2*pi/convert(Int64, trunc(num_eval_points)))), length = (convert(Int64, trunc(num_eval_points)) - 1)))
     push!(L_array, L_current)
 
     # loop through true longitudes to find dQdt min and max
@@ -403,4 +403,37 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
     mass_hist = mass_hist[1:final_index]
 
     return(Q_hist, orbit_hist, time_hist, mass_hist)
+end
+
+function make_objective(orbit_initial, orbit_target, initial_q_params, initial_sat_params, time_initial)
+    
+    function QlawArray(a)
+        # ideas
+        # add mass loss as constraint
+        # try to optimize more points
+        # use a different initial point
+        q_params = QParams(
+            initial_q_params.W_p,
+            initial_q_params.k,
+            initial_q_params.rp_min, 
+            initial_q_params.W_a,
+            initial_q_params.W_f,
+            initial_q_params.W_g,
+            initial_q_params.W_h,
+            initial_q_params.W_k,
+            a[1],
+            a[2],
+            a[3],
+            initial_q_params.central_difference_step,
+            a[4],
+            a[5],
+            a[6],
+            a[7],
+            initial_q_params.max_iter,
+            initial_q_params.Q_convergence
+        )
+        Q_hist, orbit_hist, time_hist, mass_hist = Qlaw(orbit_initial, orbit_target, q_params, initial_sat_params, time_initial) 
+        return mass_hist[1] - mass_hist[end]
+    end
+    return QlawArray
 end
