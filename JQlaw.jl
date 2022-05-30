@@ -17,6 +17,7 @@ module JQlaw
     export sat_params
     export propogateTrueAnomaly
     export Qlaw
+    export make_objective
 
     # integrator
     export RK45
