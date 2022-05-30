@@ -333,3 +333,63 @@ function central_difference(input, function_name, step_size)
     derivative = (function_name(input+step_size) - function_name(input-step_size))/(2*step_size)
     return(derivative)
 end
+
+function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Params::QParams, Sat_Params::sat_params, time_initial)
+    # convert keplarian orbits into equinoctial orbits, store orbits as arrays
+    orbit_initial_equinoctial = Keplarian2Equinoctial(orbit_inital)
+    orbit_target_equinoctial = Keplarian2Equinoctial(orbit_target)
+
+    orbit = [orbit_initial_equinoctial.p,
+            orbit_initial_equinoctial.f,
+            orbit_initial_equinoctial.g,
+            orbit_initial_equinoctial.h,
+            orbit_initial_equinoctial.k,
+            orbit_initial_equinoctial.L]
+
+    orbit_target = [orbit_target_equinoctial.p,
+            orbit_target_equinoctial.f,
+            orbit_target_equinoctial.g,
+            orbit_target_equinoctial.h,
+            orbit_target_equinoctial.k,
+            orbit_target_equinoctial.L]
+
+    # define histories to save outcomes to
+    Q_hist = []
+    orbit_hist = []
+    time_hist = []
+
+    #initialize_values
+    step_count = 0
+    Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
+    time = time_initial
+    # add initial values to history
+    push!(Q_hist, Q_value)
+    push!(orbit_hist, orbit)
+    push!(time_hist, time)
+
+    # integrate until hits max number of steps or Q convergence
+    while (step_count < Q_Params.max_iter) && (Q_value > Q_Params.Q_convergence)
+        thrust, F_t, F_r, F_n = evaluate_orbit_location(orbit, orbit_target, Q_Params, Sat_Params)
+        if thrust
+            GVE(orbit, time) = GaussVariationalEquationsEquinoctial(orbit, time; accel=[F_r,F_t,F_n])
+            orbit_new, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GVE)
+            Q_new = Q(orbit_new, orbit_target, Q_Params, Sat_Params)
+            if Q_new < Q_value
+                Q_value = Q_new
+                orbit = orbit_new
+            else
+                orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
+                Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
+            end
+        else
+            orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
+            Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
+        end
+        time = time + (Q_Params.step_size / 60. / 60. / 24.)
+        push!(Q_hist, Q_value)
+        push!(orbit_hist, orbit)
+        push!(time_hist, time)
+    end
+
+    return(Q_hist, orbit_hist, time_hist)
+end

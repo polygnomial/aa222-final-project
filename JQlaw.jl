@@ -15,11 +15,8 @@ module JQlaw
     export GaussVariationalEquationsEquinoctial
     export QParams
     export sat_params
-    export calc_D
     export propogateTrueAnomaly
-    export Q
-    export calc_D
-    export evaluate_orbit_location
+    export Qlaw
 
     # integrator
     export RK45
