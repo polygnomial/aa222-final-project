@@ -17,6 +17,9 @@ module JQlaw
     export sat_params
     export calc_D
     export propogateTrueAnomaly
+    export Q
+    export calc_D
+    export evaluate_orbit_location
 
     # integrator
     export RK45

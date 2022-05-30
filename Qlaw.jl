@@ -117,15 +117,15 @@ end
 
 function mass_loss(sat_p,Isp, ∆t)
     f = sat_p.mass * sat_p.accel
-    mdot = f / Isp / g_0 
+    mdot = f / Isp / g_0
     return mdot * ∆t
-end 
+end
 
 function mass_loss!(sat_p,Isp, ∆t)
     f = sat_p.mass * sat_p.accel
-    mdot = f / Isp / g_0 
+    mdot = f / Isp / g_0
     sat_p.mass -= mdot + ∆t
-end 
+end
 
 struct QParams
     W_p    # weight of the minimum radius function
@@ -144,6 +144,9 @@ struct QParams
     ƞ_a    # absolute effectivity threshold
     ƞ_r    # relative effectivity threshold
     num_sample_points_per_orbit    # number of sample points to calculate over an orbit to determine effectivity
+    step_size # [sec]
+    max_iter # max number of integration steps
+    Q_convergence # [sec], q convergence threshold
 end
 
 struct sat_params
@@ -196,7 +199,7 @@ function calc_D(orbit, target_orbit, Q_params, sat_params)
     g = orbit[3]
     h = orbit[4]
     k = orbit[5]
-    ν = orbit[6]
+    L = orbit[6]
     p_targ = target_orbit[1]
     f_targ = target_orbit[2]
     g_targ = target_orbit[3]
@@ -209,32 +212,31 @@ function calc_D(orbit, target_orbit, Q_params, sat_params)
     n = sqrt(µ/a^3)
     b = a*sqrt(1-e^2)
     h_mom = n*a*b
-    L = ν + arctan(g/f)
     w = 1+f*cos(L)+g*sin(L)
     r = p/w
     s_2 = 1 + h^2 + k^2
 
     # calculate dQ_dae
-    Q_of_a(a) = Q(orbit = [a, orbit[2], orbit[3], orbit[4], orbit[5], orbit[6]],
-                  target_orbit = target_orbit,
-                  Q_params = Q_params,
-                  sat_params = sat_params)
-    Q_of_f(f) = Q(orbit = [orbit[1], f, orbit[3], orbit[4], orbit[5], orbit[6]],
-                target_orbit = target_orbit,
-                Q_params = Q_params,
-                sat_params = sat_params)
-    Q_of_g(g) = Q(orbit = [orbit[1], orbit[2], g, orbit[4], orbit[5], orbit[6]],
-                target_orbit = target_orbit,
-                Q_params = Q_params,
-                sat_params = sat_params)
-    Q_of_h(h) = Q(orbit = [orbit[1], orbit[2], orbit[3], h, orbit[5], orbit[6]],
-                target_orbit = target_orbit,
-                Q_params = Q_params,
-                sat_params = sat_params)
-    Q_of_k(k) = Q(orbit = [orbit[1], orbit[2], orbit[3], orbit[4], k, orbit[6]],
-                target_orbit = target_orbit,
-                Q_params = Q_params,
-                sat_params = sat_params)
+    Q_of_a(a) = Q([a, orbit[2], orbit[3], orbit[4], orbit[5], orbit[6]],
+                  target_orbit,
+                  Q_params,
+                  sat_params)
+    Q_of_f(f) = Q([orbit[1], f, orbit[3], orbit[4], orbit[5], orbit[6]],
+                target_orbit,
+                Q_params,
+                sat_params)
+    Q_of_g(g) = Q([orbit[1], orbit[2], g, orbit[4], orbit[5], orbit[6]],
+                target_orbit,
+                Q_params,
+                sat_params)
+    Q_of_h(h) = Q([orbit[1], orbit[2], orbit[3], h, orbit[5], orbit[6]],
+                target_orbit,
+                Q_params,
+                sat_params)
+    Q_of_k(k) = Q([orbit[1], orbit[2], orbit[3], orbit[4], k, orbit[6]],
+                target_orbit,
+                Q_params,
+                sat_params)
     dQ_da = central_difference(orbit[1], Q_of_a, Q_params.central_difference_step)
     dQ_df = central_difference(orbit[2], Q_of_f, Q_params.central_difference_step)
     dQ_dg = central_difference(orbit[3], Q_of_g, Q_params.central_difference_step)
@@ -269,15 +271,16 @@ function calc_D(orbit, target_orbit, Q_params, sat_params)
     return(D1, D2, D3)
 end
 
-function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params, num_eval_points)
+function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params)
+    num_eval_points = Q_params.num_sample_points_per_orbit
+
     # pull current orbit true longitude
     f = orbit[2]
     g = orbit[3]
-    ν = orbit[6]
-    L_current = ν + arctan(g/f)
+    L_current = orbit[6]
 
     # create array of true longitude to search
-    L_array = range(0, (2*pi - (2*pi/num_eval_points)), length = (num_eval_points - 1))
+    L_array = collect(range(0, (2*pi - (2*pi/num_eval_points)), length = (num_eval_points - 1)))
     push!(L_array, L_current)
 
     # loop through true longitudes to find dQdt min and max
@@ -285,11 +288,13 @@ function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params, num_
     D2_array = []
     D3_array = []
     for L in L_array
-        D1, D2, D3 = calc_D(orbit, target_orbit, Q_params, sat_params)
+        D1, D2, D3 = calc_D([orbit[1], orbit[2], orbit[3], orbit[4], orbit[5], L],
+                            target_orbit, Q_params, sat_params)
         push!(D1_array, D1)
         push!(D2_array, D2)
         push!(D3_array, D3)
     end
+
     # calculate dQdt min over alpha and beta
     dQdt = []
     for i in 1:length(D1_array)
@@ -300,17 +305,20 @@ function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params, num_
     # determine dqdt min and max over alpha beta and true longitude
     dQdt_min = minimum(dQdt)
     dQdt_max = maximum(dQdt)
-    dQdt_current = qQdt[end]
+    dQdt_current = dQdt[end]
 
     # calculate rlative and absolute efficiencies
     ƞ_a = dQdt_current/dQdt_min
     ƞ_r = (dQdt_current-dQdt_max)/(dQdt_min-dQdt_max)
+    if isnan(ƞ_r)
+        ƞ_r = 1.
+    end
 
     # check with Q param effetivity thresholds
-    if (ƞ_a > Q_params.ƞ_a) && (ƞ_r > Q_params.ƞ_r)
+    if (ƞ_a >= Q_params.ƞ_a) && (ƞ_r >= Q_params.ƞ_r) && (dQdt_current < 0.)
         # thrust in optimal direction for step size
-        α_optimal = arctan(-D2[end], -D1[end])
-        β_optimal = arctan(-D3[end]/sqrt(D1[end]^2 + D2[end]^2))
+        α_optimal = atan(-D2_array[end], -D1_array[end])
+        β_optimal = atan(-D3_array[end]/sqrt(D1_array[end]^2 + D2_array[end]^2))
         F_t = sat_params.accel * cos(β_optimal) * cos(α_optimal)
         F_r = sat_params.accel * cos(β_optimal) * sin(α_optimal)
         F_n = sat_params.accel * sin(β_optimal)
