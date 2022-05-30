@@ -308,8 +308,7 @@ function evaluate_orbit_location(orbit, target_orbit, Q_params, sat_params)
     if isnan(ƞ_r)
         ƞ_r = 1.
     end
-
-    # check with Q param effetivity thresholds
+    # check with Q param effectivity thresholds
     if (ƞ_a >= Q_params.ƞ_a) && (ƞ_r >= Q_params.ƞ_r) && (dQdt_current < 0.)
         # thrust in optimal direction for step size
         α_optimal = atan(-D2_array[end], -D1_array[end])
@@ -374,19 +373,24 @@ function Qlaw(orbit_inital::KeplarianOrbit, orbit_target::KeplarianOrbit, Q_Para
                 Q_value = Q_new
                 orbit = orbit_new
                 mass = mass_loss(mass, Sat_Params, Q_Params.step_size)
+                # print("Thrust! \n")
             else
                 orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
                 Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
+                # print("no-trust \n")
             end
         else
             orbit, error = RK45(orbit, time, Q_Params.step_size, dOEdt = GaussVariationalEquationsEquinoctial)
             Q_value = Q(orbit, orbit_target, Q_Params, Sat_Params)
+            # print("dwell \n")
         end
         time = time + (Q_Params.step_size / 60. / 60. / 24.)
         push!(Q_hist, Q_value)
         push!(orbit_hist, orbit)
         push!(time_hist, time)
         push!(mass_hist, mass)
+        step_count = step_count + 1
+        # print(Q_value, "\n")
     end
 
     return(Q_hist, orbit_hist, time_hist, mass_hist)
